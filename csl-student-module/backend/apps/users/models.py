@@ -71,5 +71,13 @@ class StudentProfile(models.Model):
             models.Index(fields=["course", "batch"]),
         ]
 
+    def clean(self):
+        super().clean()
+        if self.batch and self.course and self.batch.course_id != self.course.id:
+            from django.core.exceptions import ValidationError
+            raise ValidationError(
+                {"batch": f"Batch '{self.batch.name}' does not belong to course '{self.course.name}'."}
+            )
+
     def __str__(self):
         return f"{self.registration_number} - {self.first_name}"

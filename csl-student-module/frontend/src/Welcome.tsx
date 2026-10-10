@@ -32,9 +32,25 @@ export function Welcome({ user, onLogout }: WelcomeProps) {
           <p><strong>Email:</strong> {user.email}</p>
         </div>
       )}
-      <button onClick={handleLogout} style={{ padding: '8px 16px', marginTop: 16 }}>
-        Logout
-      </button>
+      <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 20, flexWrap: 'wrap' }}>
+        <a
+          href="http://127.0.0.1:8000/admin/"
+          target="_blank"
+          rel="noreferrer"
+          style={{ padding: '8px 16px', backgroundColor: '#0f766e', color: '#fff', textDecoration: 'none', borderRadius: 6, fontWeight: 600, display: 'inline-flex', alignItems: 'center' }}
+        >
+          Open Django Admin Portal &rarr;
+        </a>
+        <button
+          onClick={() => navigate('/staff/activities')}
+          style={{ padding: '8px 16px', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}
+        >
+          Manage Activities
+        </button>
+        <button onClick={handleLogout} style={{ padding: '8px 16px', borderRadius: 6, border: '1px solid #d1d5db', cursor: 'pointer' }}>
+          Logout
+        </button>
+      </div>
     </div>
   );
 }

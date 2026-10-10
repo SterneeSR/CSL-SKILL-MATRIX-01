@@ -23,13 +23,22 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-h(*5bnl_99h$3=wk1+3=i=b)j*p2v2bn3te+pjxbp%=sa&(=e-')
-
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DJANGO_DEBUG', 'True') == 'True'
+DEBUG = os.getenv('DJANGO_DEBUG', 'True').lower() in ('true', '1')
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
+if not SECRET_KEY:
+    if not DEBUG or os.getenv('DJANGO_ENV') == 'production':
+        raise RuntimeError("DJANGO_SECRET_KEY must be set in production environments (when DEBUG is False)!")
+    SECRET_KEY = 'django-insecure-h(*5bnl_99h$3=wk1+3=i=b)j*p2v2bn3te+pjxbp%=sa&(=e-'
+
+# Parse allowed hosts from environment
+_allowed_hosts_env = os.getenv('DJANGO_ALLOWED_HOSTS')
+if _allowed_hosts_env:
+    ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()]
+else:
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 
 
 # Application definition
@@ -49,6 +58,7 @@ INSTALLED_APPS = [
     'apps.courses',
     'apps.activities',
     'apps.performance',
+    'apps.assessments',
 ]
 
 AUTH_USER_MODEL = 'users.User'
@@ -71,7 +81,7 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -146,25 +156,41 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 
-# ─── CORS (local development only) ───────────────────────────────────────────
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-]
+# ─── Static files ─────────────────────────────────────────────────────────────
+STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+
+# ─── CORS (configurable for production) ───────────────────────────────────────
+_cors_env = os.getenv('DJANGO_CORS_ALLOWED_ORIGINS')
+if _cors_env:
+    CORS_ALLOWED_ORIGINS = [o.strip() for o in _cors_env.split(',') if o.strip()]
+else:
+    CORS_ALLOWED_ORIGINS = [
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+    ]
 CORS_ALLOW_CREDENTIALS = True  # required for session cookies
 
 
-# ─── Session cookies ──────────────────────────────────────────────────────────
+# ─── Session & CSRF Cookies (HTTPS in production) ─────────────────────────────
+_is_secure = os.getenv('DJANGO_SECURE_COOKIES', 'False').lower() in ('true', '1') or (not DEBUG)
+
 SESSION_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SECURE = False   # set True in production (HTTPS only)
+SESSION_COOKIE_SECURE = _is_secure
 
-CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-]
+_csrf_env = os.getenv('DJANGO_CSRF_TRUSTED_ORIGINS')
+if _csrf_env:
+    CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_env.split(',') if o.strip()]
+else:
+    CSRF_TRUSTED_ORIGINS = [
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+    ]
 CSRF_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_HTTPONLY = False    # frontend needs to read CSRF token
+CSRF_COOKIE_SECURE = _is_secure
 
 
 # ─── Django REST Framework ────────────────────────────────────────────────────

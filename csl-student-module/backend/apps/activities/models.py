@@ -118,12 +118,40 @@ class AssessmentSection(models.Model):
 
 
 class Question(models.Model):
+    class QuestionType(models.TextChoices):
+        NORMAL = "NORMAL", "Normal / Conceptual"
+        CODING = "CODING", "Coding Problem"
+
     section = models.ForeignKey(
         AssessmentSection,
         on_delete=models.CASCADE,
         related_name="questions",
     )
-    prompt = models.TextField()
+    question_type = models.CharField(
+        max_length=20,
+        choices=QuestionType.choices,
+        default=QuestionType.NORMAL,
+    )
+    prompt = models.TextField(help_text="Problem statement or question text")
+    input_description = models.TextField(blank=True, help_text="Format and constraints for inputs")
+    output_description = models.TextField(blank=True, help_text="Format of expected output")
+    constraints = models.TextField(blank=True, help_text="Constraints on time, memory, or variable ranges")
+    sample_input = models.TextField(blank=True, help_text="Sample input for test cases")
+    sample_output = models.TextField(blank=True, help_text="Expected output for sample input")
+    allowed_languages = models.CharField(
+        max_length=255,
+        blank=True,
+        default="Python, JavaScript, Java, C++",
+        help_text="Comma-separated list of allowed programming languages",
+    )
+    time_limit_seconds = models.PositiveIntegerField(
+        default=2,
+        help_text="Time limit per test execution in seconds",
+    )
+    memory_limit_mb = models.PositiveIntegerField(
+        default=256,
+        help_text="Memory limit in megabytes",
+    )
     skill = models.ForeignKey(
         "skills.Skill",
         on_delete=models.PROTECT,
@@ -143,7 +171,17 @@ class Question(models.Model):
         ordering = ["section", "order", "id"]
         indexes = [
             models.Index(fields=["skill", "sub_skill"]),
+            models.Index(fields=["question_type"]),
         ]
+
+    def clean(self):
+        super().clean()
+        if self.skill_id and self.sub_skill_id:
+            if self.sub_skill.skill_id != self.skill_id:
+                from django.core.exceptions import ValidationError
+                raise ValidationError(
+                    {"sub_skill": f"SubSkill '{self.sub_skill.name}' does not belong to Skill '{self.skill.name}'."}
+                )
 
     def __str__(self):
         return f"Q{self.order}: {self.prompt[:60]}"

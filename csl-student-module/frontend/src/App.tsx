@@ -11,7 +11,10 @@ import { StudentLayout } from './layouts/StudentLayout';
 import { StudentDashboardPage } from './pages/student/StudentDashboardPage';
 import { StudentProfilePage } from './pages/student/StudentProfilePage';
 import { StudentSkillsPage } from './pages/student/StudentSkillsPage';
+import { StudentActivitiesPage } from './pages/student/StudentActivitiesPage';
+import { StudentActivityDetailPage } from './pages/student/StudentActivityDetailPage';
 import { ComingSoonPage } from './pages/student/ComingSoonPage';
+import { StaffActivitiesPage } from './pages/staff/StaffActivitiesPage';
 
 interface UserData {
   email: string;
@@ -76,6 +79,16 @@ export default function App() {
             )
           }
         />
+        <Route
+          path="/staff/activities"
+          element={
+            user && user.role !== 'STUDENT' ? (
+              <StaffActivitiesPage />
+            ) : (
+              <Navigate to="/welcome" replace />
+            )
+          }
+        />
 
         {/* Authenticated student section */}
         <Route
@@ -89,7 +102,8 @@ export default function App() {
           <Route index element={<StudentDashboardPage />} />
           <Route path="profile" element={<StudentProfilePage />} />
           <Route path="skills" element={<StudentSkillsPage />} />
-          <Route path="activities" element={<ComingSoon module="Activities" />} />
+          <Route path="activities" element={<StudentActivitiesPage />} />
+          <Route path="activities/:id" element={<StudentActivityDetailPage />} />
           <Route path="performance" element={<ComingSoon module="Performance" />} />
           <Route path="leaderboard" element={<ComingSoon module="Leaderboard" />} />
         </Route>

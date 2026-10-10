@@ -231,6 +231,20 @@ export function StudentDashboardPage() {
             View Skills
           </Link>
           <Link
+            to="/student/activities"
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#2563eb',
+              color: '#ffffff',
+              borderRadius: '6px',
+              textDecoration: 'none',
+              fontSize: '0.9rem',
+              fontWeight: 500,
+            }}
+          >
+            View Activities
+          </Link>
+          <Link
             to="/student/profile"
             style={{
               padding: '8px 16px',

@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getStudentActivityDetail } from '../../api/student';
 import type { StudentActivityDetail } from '../../types/student';
@@ -41,9 +41,18 @@ export function StudentActivityDetailPage() {
     return (
       <div>
         <p>Activity not found or not accessible.</p>
-        <Link to="/student/activities" style={{ color: '#2563eb', textDecoration: 'underline' }}>
-          Back to Activities
-        </Link>
+        <div style={{ marginTop: '8px', display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={loadDetail}
+            style={{ padding: '6px 12px' }}
+          >
+            Try again
+          </button>
+          <Link to="/student/activities" style={{ color: '#2563eb', textDecoration: 'underline' }}>
+            Back to Activities
+          </Link>
+        </div>
       </div>
     );
   }
