@@ -9,12 +9,14 @@ function getCookie(name: string): string | null {
   return null;
 }
 
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+
 /**
  * Axios instance for student API endpoints (baseURL /api).
  * Mirrors the session-based auth client in ../api.ts (which is scoped to /api/auth).
  */
 export const apiClient = axios.create({
-  baseURL: '/api',
+  baseURL: `${API_BASE}/api`,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',

@@ -34,7 +34,7 @@ export function Welcome({ user, onLogout }: WelcomeProps) {
       )}
       <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 20, flexWrap: 'wrap' }}>
         <a
-          href="http://127.0.0.1:8000/admin/"
+          href={import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/admin/` : "/admin/"}
           target="_blank"
           rel="noreferrer"
           style={{ padding: '8px 16px', backgroundColor: '#0f766e', color: '#fff', textDecoration: 'none', borderRadius: 6, fontWeight: 600, display: 'inline-flex', alignItems: 'center' }}

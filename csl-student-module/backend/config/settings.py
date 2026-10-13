@@ -38,7 +38,10 @@ _allowed_hosts_env = os.getenv('DJANGO_ALLOWED_HOSTS')
 if _allowed_hosts_env:
     ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()]
 else:
-    ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'testserver']
+
+if 'testserver' not in ALLOWED_HOSTS and ('test' in sys.argv or DEBUG):
+    ALLOWED_HOSTS.append('testserver')
 
 
 # Application definition
@@ -68,6 +71,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',  # must be first
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -98,13 +102,24 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
+import dj_database_url
 
-if 'test' in sys.argv or os.getenv('DB_ENGINE') == 'sqlite':
+DATABASE_URL = os.getenv('DATABASE_URL')
+if ('test' in sys.argv and os.getenv('USE_POSTGRES_TEST') != '1') or os.getenv('DB_ENGINE') == 'sqlite':
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': ':memory:',
         }
+    }
+elif DATABASE_URL:
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=int(os.getenv('DATABASE_CONN_MAX_AGE', '60')),
+            conn_health_checks=True,
+            ssl_require=True,
+        )
     }
 else:
     DATABASES = {
@@ -153,12 +168,10 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
-STATIC_URL = 'static/'
-
-
-# ─── Static files ─────────────────────────────────────────────────────────────
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+# Use CompressedStaticFilesStorage to serve gzip/brotli without crashing on missing manifest entries during tests
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
 
 # ─── CORS (configurable for production) ───────────────────────────────────────
@@ -176,7 +189,7 @@ CORS_ALLOW_CREDENTIALS = True  # required for session cookies
 # ─── Session & CSRF Cookies (HTTPS in production) ─────────────────────────────
 _is_secure = os.getenv('DJANGO_SECURE_COOKIES', 'False').lower() in ('true', '1') or (not DEBUG)
 
-SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SAMESITE = 'None' if _is_secure else 'Lax'
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = _is_secure
 
@@ -188,7 +201,7 @@ else:
         'http://localhost:5173',
         'http://127.0.0.1:5173',
     ]
-CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'None' if _is_secure else 'Lax'
 CSRF_COOKIE_HTTPONLY = False    # frontend needs to read CSRF token
 CSRF_COOKIE_SECURE = _is_secure
 
@@ -201,4 +214,52 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+}
+
+# ─── Production Security & Proxy Configuration ───────────────────────────────
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+_ssl_redirect = os.getenv('DJANGO_SECURE_SSL_REDIRECT', 'False').lower() in ('true', '1') or (not DEBUG)
+if _ssl_redirect:
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = int(os.getenv('DJANGO_SECURE_HSTS_SECONDS', '31536000'))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+
+# Configure connection pooling / persistence for PostgreSQL in production
+if 'postgresql' in DATABASES['default'].get('ENGINE', ''):
+    DATABASES['default']['CONN_MAX_AGE'] = int(os.getenv('DATABASE_CONN_MAX_AGE', '60'))
+
+# ─── Server-side Logging ─────────────────────────────────────────────────────
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{asctime}] {levelname} {name}:{lineno} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
+    },
+    'loggers': {
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'apps.assessments': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
 }

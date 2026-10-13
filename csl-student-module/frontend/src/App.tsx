@@ -16,6 +16,12 @@ import { StudentActivityDetailPage } from './pages/student/StudentActivityDetail
 import { ComingSoonPage } from './pages/student/ComingSoonPage';
 import { StaffActivitiesPage } from './pages/staff/StaffActivitiesPage';
 
+import { AssessmentRegisterPage } from './pages/assessment/AssessmentRegisterPage';
+import { AssessmentInstructionsPage } from './pages/assessment/AssessmentInstructionsPage';
+import { AssessmentExamPage } from './pages/assessment/AssessmentExamPage';
+import { AssessmentResultsPage } from './pages/assessment/AssessmentResultsPage';
+import { CSLAdminPortalPage } from './pages/admin/CSLAdminPortalPage';
+
 interface UserData {
   email: string;
   name: string;
@@ -52,19 +58,35 @@ export default function App() {
     setUser(null);
   };
 
-  if (loading) {
-    return <div style={{ textAlign: 'center', marginTop: 50 }}>Loading...</div>;
-  }
-
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to={user ? '/welcome' : '/login'} replace />} />
+        {/* Default Route: Student Assessment Portal Entry */}
+        <Route path="/" element={<AssessmentRegisterPage />} />
+
+        {/* Initial Assessment Student Journey */}
+        <Route path="/assessment" element={<AssessmentRegisterPage />} />
+        <Route path="/assessment/register" element={<AssessmentRegisterPage />} />
+        <Route path="/assessment/instructions" element={<AssessmentInstructionsPage />} />
+        <Route path="/assessment/exam/:attemptId" element={<AssessmentExamPage />} />
+        <Route path="/assessment/results/:attemptId" element={<AssessmentResultsPage />} />
+
+        {/* Dedicated React CSL Admin Panel */}
+        <Route path="/csl-admin" element={<CSLAdminPortalPage />} />
+        <Route path="/csl-admin/*" element={<CSLAdminPortalPage />} />
+
+        {/* Traditional Student Portal & Auth Routes */}
         <Route path="/register" element={<Register />} />
         <Route
           path="/login"
           element={
-            user ? <Navigate to={user.role === 'STUDENT' ? '/student' : '/welcome'} replace /> : <Login onLoginSuccess={(u) => setUser(u)} />
+            loading ? (
+              <div style={{ textAlign: 'center', marginTop: 50 }}>Loading...</div>
+            ) : user ? (
+              <Navigate to={user.role === 'STUDENT' ? '/student' : '/welcome'} replace />
+            ) : (
+              <Login onLoginSuccess={(u) => setUser(u)} />
+            )
           }
         />
         <Route path="/pending" element={<Pending />} />
@@ -72,7 +94,9 @@ export default function App() {
         <Route
           path="/welcome"
           element={
-            user ? (
+            loading ? (
+              <div style={{ textAlign: 'center', marginTop: 50 }}>Loading...</div>
+            ) : user ? (
               <Welcome user={user} onLogout={handleLogout} />
             ) : (
               <Navigate to="/login" replace />
@@ -82,7 +106,9 @@ export default function App() {
         <Route
           path="/staff/activities"
           element={
-            user && user.role !== 'STUDENT' ? (
+            loading ? (
+              <div style={{ textAlign: 'center', marginTop: 50 }}>Loading...</div>
+            ) : user && user.role !== 'STUDENT' ? (
               <StaffActivitiesPage />
             ) : (
               <Navigate to="/welcome" replace />
@@ -94,9 +120,13 @@ export default function App() {
         <Route
           path="/student"
           element={
-            <ProtectedRoute isAuthenticated={!!user}>
-              <StudentLayout onLogout={handleLogout} />
-            </ProtectedRoute>
+            loading ? (
+              <div style={{ textAlign: 'center', marginTop: 50 }}>Loading...</div>
+            ) : (
+              <ProtectedRoute isAuthenticated={!!user}>
+                <StudentLayout onLogout={handleLogout} />
+              </ProtectedRoute>
+            )
           }
         >
           <Route index element={<StudentDashboardPage />} />

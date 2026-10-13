@@ -14,9 +14,15 @@ class Command(BaseCommand):
             default="csldeveloper01@gmail.com",
             help="Admin email address (default: csldeveloper01@gmail.com)",
         )
+        parser.add_argument(
+            "--password",
+            default="",
+            help="Optional password for non-interactive admin creation or reset",
+        )
 
     def handle(self, *args, **options):
         email = options["email"].strip().lower()
+        password_arg = options.get("password", "").strip()
         user = User.objects.filter(email=email).first()
 
         if user:
@@ -25,18 +31,24 @@ class Command(BaseCommand):
             user.is_staff = True
             user.is_superuser = True
             user.is_active = True
-            user.save(update_fields=["role", "status", "is_staff", "is_superuser", "is_active"])
+            update_fields = ["role", "status", "is_staff", "is_superuser", "is_active"]
+            if password_arg:
+                user.set_password(password_arg)
+                update_fields.append("password")
+            user.save(update_fields=update_fields)
             self.stdout.write(self.style.SUCCESS(f"User {email} successfully promoted to Admin & Superuser."))
         else:
             self.stdout.write(f"Account {email} does not exist yet.")
-            password = getpass.getpass("Enter password for new admin: ")
-            confirm = getpass.getpass("Confirm password: ")
+            password = password_arg
             if not password:
-                self.stdout.write(self.style.ERROR("Password cannot be empty."))
-                return
-            if password != confirm:
-                self.stdout.write(self.style.ERROR("Passwords do not match."))
-                return
+                password = getpass.getpass("Enter password for new admin: ")
+                confirm = getpass.getpass("Confirm password: ")
+                if not password:
+                    self.stdout.write(self.style.ERROR("Password cannot be empty."))
+                    return
+                if password != confirm:
+                    self.stdout.write(self.style.ERROR("Passwords do not match."))
+                    return
 
             username = email.split("@")[0]
             user = User.objects.create_user(

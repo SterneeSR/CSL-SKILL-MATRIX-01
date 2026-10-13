@@ -6,6 +6,7 @@ from django.shortcuts import render, redirect
 from django.urls import path
 from django.contrib import messages
 from django.utils.html import format_html
+from django.db import transaction
 
 from .models import (
     QuestionBank,
@@ -69,34 +70,47 @@ class QuestionBankAdmin(admin.ModelAdmin):
                 decoded_file = file.read().decode("utf-8-sig", errors="replace")
                 reader = csv.DictReader(io.StringIO(decoded_file))
                 
-                created_count = 0
+                required_cols = {"prompt", "section_type", "option_a", "option_b", "option_c", "option_d", "correct_option"}
+                if not reader.fieldnames or not required_cols.issubset(set(reader.fieldnames)):
+                    missing = required_cols - set(reader.fieldnames or [])
+                    messages.error(request, f"CSV is missing required columns: {', '.join(missing)}")
+                    return render(request, "admin/assessments/questionbank/import_csv.html", {"form": form})
+
+                questions_to_create = []
                 errors = []
+                seen_prompts = set(QuestionBank.objects.values_list("prompt", flat=True))
+
                 for idx, row in enumerate(reader, start=2):
-                    try:
-                        prompt = row.get("prompt", "").strip()
-                        section_type = row.get("section_type", "").strip().upper()
-                        category = row.get("category", "").strip()
-                        difficulty = row.get("difficulty", "MEDIUM").strip().upper()
-                        opt_a = row.get("option_a", "").strip()
-                        opt_b = row.get("option_b", "").strip()
-                        opt_c = row.get("option_c", "").strip()
-                        opt_d = row.get("option_d", "").strip()
-                        correct = row.get("correct_option", "").strip().upper()
-                        explanation = row.get("explanation", "").strip()
+                    prompt = row.get("prompt", "").strip()
+                    section_type = row.get("section_type", "").strip().upper()
+                    category = row.get("category", "").strip()
+                    difficulty = row.get("difficulty", "MEDIUM").strip().upper()
+                    opt_a = row.get("option_a", "").strip()
+                    opt_b = row.get("option_b", "").strip()
+                    opt_c = row.get("option_c", "").strip()
+                    opt_d = row.get("option_d", "").strip()
+                    correct = row.get("correct_option", "").strip().upper()
+                    explanation = row.get("explanation", "").strip()
 
-                        if not prompt or not opt_a or not opt_b or not opt_c or not opt_d:
-                            errors.append(f"Row {idx}: Missing prompt or options.")
-                            continue
+                    if not prompt or not opt_a or not opt_b or not opt_c or not opt_d:
+                        errors.append(f"Row {idx}: Missing prompt or options.")
+                        continue
 
-                        if section_type not in ("APTITUDE", "CODING"):
-                            errors.append(f"Row {idx}: Invalid section_type '{section_type}'. Must be APTITUDE or CODING.")
-                            continue
+                    if section_type not in ("APTITUDE", "CODING"):
+                        errors.append(f"Row {idx}: Invalid section_type '{section_type}'. Must be APTITUDE or CODING.")
+                        continue
 
-                        if correct not in ("A", "B", "C", "D"):
-                            errors.append(f"Row {idx}: Invalid correct_option '{correct}'. Must be A, B, C, or D.")
-                            continue
+                    if correct not in ("A", "B", "C", "D"):
+                        errors.append(f"Row {idx}: Invalid correct_option '{correct}'. Must be A, B, C, or D.")
+                        continue
 
-                        QuestionBank.objects.create(
+                    if prompt in seen_prompts:
+                        errors.append(f"Row {idx}: Duplicate prompt skipped: '{prompt[:50]}...'.")
+                        continue
+
+                    seen_prompts.add(prompt)
+                    questions_to_create.append(
+                        QuestionBank(
                             prompt=prompt,
                             section_type=section_type,
                             category=category or "General",
@@ -108,14 +122,20 @@ class QuestionBankAdmin(admin.ModelAdmin):
                             correct_option=correct,
                             explanation=explanation,
                         )
-                        created_count += 1
-                    except Exception as e:
-                        errors.append(f"Row {idx}: {str(e)}")
+                    )
 
-                if errors:
-                    messages.warning(request, f"Imported {created_count} questions with {len(errors)} issues: " + "; ".join(errors[:5]))
-                else:
-                    messages.success(request, f"Successfully imported {created_count} questions!")
+                if errors and not questions_to_create:
+                    messages.error(request, f"Import failed completely with {len(errors)} errors: " + " | ".join(errors[:5]))
+                elif questions_to_create:
+                    with transaction.atomic():
+                        QuestionBank.objects.bulk_create(questions_to_create)
+                    if errors:
+                        messages.warning(
+                            request,
+                            f"Imported {len(questions_to_create)} questions with {len(errors)} row-level notices: " + " | ".join(errors[:5]),
+                        )
+                    else:
+                        messages.success(request, f"Successfully imported all {len(questions_to_create)} questions transactional batch!")
                 return redirect("..")
         else:
             form = CSVImportForm()
@@ -150,10 +170,23 @@ class AssessmentConfigAdmin(admin.ModelAdmin):
         "aptitude_count",
         "coding_count",
         "max_attempts",
+        "max_tab_switches_warning",
+        "auto_submit_on_tab_limit",
         "is_active",
         "created_at",
     )
-    list_editable = ("is_active", "duration_minutes")
+    list_editable = ("is_active", "duration_minutes", "max_tab_switches_warning", "auto_submit_on_tab_limit")
+    fieldsets = (
+        ("Assessment Overview", {
+            "fields": ("title", "description", "is_active")
+        }),
+        ("Exam Duration & Question Allocation", {
+            "fields": ("duration_minutes", "total_marks", "aptitude_count", "coding_count", "max_attempts")
+        }),
+        ("Browser Integrity & Tab Monitoring", {
+            "fields": ("max_tab_switches_warning", "auto_submit_on_tab_limit")
+        }),
+    )
 
 
 class AttemptQuestionSnapshotInline(admin.TabularInline):
@@ -184,7 +217,8 @@ class IntegrityEventInline(admin.TabularInline):
     model = IntegrityEvent
     extra = 0
     can_delete = False
-    readonly_fields = ("event_type", "client_timestamp", "server_timestamp", "metadata")
+    readonly_fields = ("event_type", "event_id", "client_timestamp", "server_timestamp", "metadata")
+    fields = ("event_type", "event_id", "client_timestamp", "server_timestamp", "metadata")
 
 
 @admin.register(Candidate)
@@ -214,15 +248,37 @@ class AssessmentAttemptAdmin(admin.ModelAdmin):
         "coding_score",
         "percentage",
         "tab_switch_count",
+        "fullscreen_exit_count",
+        "is_flagged",
+        "get_flag_status",
         "started_at",
         "submitted_at",
     )
-    list_filter = ("state", "config", "candidate__college", "is_flagged", "started_at")
+    list_filter = ("state", "is_flagged", "config", "candidate__college", "started_at")
     search_fields = (
         "candidate__full_name",
         "candidate__register_number",
         "candidate__email",
         "candidate__college",
+        "flag_reason",
+    )
+    readonly_fields = (
+        "candidate",
+        "config",
+        "state",
+        "started_at",
+        "deadline",
+        "submitted_at",
+        "aptitude_score",
+        "coding_score",
+        "total_score",
+        "percentage",
+        "tab_switch_count",
+        "fullscreen_exit_count",
+        "is_flagged",
+        "flag_reason",
+        "created_at",
+        "updated_at",
     )
     ordering = ("-created_at",)
     inlines = [AttemptQuestionSnapshotInline, IntegrityEventInline]
@@ -237,10 +293,21 @@ class AssessmentAttemptAdmin(admin.ModelAdmin):
     get_college.short_description = "College"
     get_college.admin_order_field = "candidate__college"
 
+    def get_flag_status(self, obj):
+        if obj.is_flagged:
+            return format_html('<span style="color: #dc2626; font-weight: 600;">⚠ {}</span>', obj.flag_reason or "Flagged")
+        return format_html('<span style="color: #16a34a;">✓ Clean</span>')
+    get_flag_status.short_description = "Integrity Status"
+
 
 @admin.register(IntegrityEvent)
 class IntegrityEventAdmin(admin.ModelAdmin):
-    list_display = ("attempt", "event_type", "server_timestamp", "metadata")
+    list_display = ("attempt", "get_candidate_name", "event_type", "event_id", "server_timestamp")
     list_filter = ("event_type", "server_timestamp")
-    search_fields = ("attempt__candidate__full_name", "attempt__candidate__register_number")
+    search_fields = ("attempt__candidate__full_name", "attempt__candidate__register_number", "event_id")
+    readonly_fields = ("attempt", "event_type", "event_id", "client_timestamp", "server_timestamp", "metadata")
     ordering = ("-server_timestamp",)
+
+    def get_candidate_name(self, obj):
+        return obj.attempt.candidate.full_name
+    get_candidate_name.short_description = "Candidate"
